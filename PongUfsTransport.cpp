@@ -13,6 +13,7 @@
 #include <kern/clock.h>
 #include <mach/mach_time.h>
 #include <libkern/c++/OSBoolean.h>
+#include <libkern/c++/OSData.h>
 #include <libkern/c++/OSDictionary.h>
 #include <libkern/c++/OSIterator.h>
 #include <libkern/c++/OSNumber.h>
@@ -48,12 +49,8 @@ struct UfsHost {
 static UfsHost gHost;
 static uint32_t gWifiUfsReady;
 static bool gTransportAttempted;
-enum : uint64_t {
-  // Pong LUN0 GPT entry "userdata", captured from this phone in recovery.
-  kPongUserdataFirst4k = 0x413248ULL,
-  kPongUserdataLast4k = 0x75a40eaULL,
-  kRootLogicalBlock = 512,
-};
+enum : uint64_t { kRootLogicalBlock = 512 };
+#include "UserdataGeometry.h"
 struct RootDiskWindow {
   const char *name;
   const char *product;
@@ -464,8 +461,6 @@ bool PongUfsBlock::start(IOService *provider) {
     PongProbeRecord(4, "ufs-transport", PongProbeFail, detail, window.baseByte);
     return false;
   }
-  gRootDiagnostic.first = kPongUserdataFirst4k;
-  gRootDiagnostic.last = kPongUserdataLast4k;
   gRootDiagnostic.windowBytes = window.size;
   const bool writableWindow = gHost.writable && !(window.baseByte & 4095) && !(window.size & 4095);
   IOLog("PONG_UFS: SHNGROOT %s first read complete signature=1 base=%llx bytes=%llx; publish 512-byte %s disk\n",
@@ -572,13 +567,29 @@ extern "C" bool pong_ufs_transport_start(IOService *provider) {
     return transportFailure("original storage metaclass not registered");
   if (meta->getClassSize() != sizeof(IOBlockStorageDevice) || meta->getSuperClass() != &IOService::gMetaClass)
     return transportFailure("original storage class/parent ABI mismatch");
+  IOService *device = provider ? provider->getProvider() : nullptr;
+  OSObject *firstProperty = device ? device->getProperty("unixnu,userdata-first-lba") : nullptr;
+  OSObject *lastProperty = device ? device->getProperty("unixnu,userdata-last-lba") : nullptr;
+  OSData *firstData = OSDynamicCast(OSData, firstProperty);
+  OSData *lastData = OSDynamicCast(OSData, lastProperty);
+  if ((firstProperty && (!firstData || firstData->getLength() != sizeof(uint64_t))) ||
+      (lastProperty && (!lastData || lastData->getLength() != sizeof(uint64_t))) ||
+      (!!firstProperty != !!lastProperty))
+    return transportFailure("invalid userdata geometry properties");
+  uint64_t expectedFirst, expectedLast;
+  if (!ufsExpectedUserdataGeometry(firstData ? firstData->getBytesNoCopy() : nullptr,
+                                   firstData ? firstData->getLength() : 0,
+                                   lastData ? lastData->getBytesNoCopy() : nullptr,
+                                   lastData ? lastData->getLength() : 0,
+                                   &expectedFirst, &expectedLast))
+    return transportFailure("invalid userdata geometry properties");
   if (!hostBringUp()) return false;
   RootLayout layout;
   const char *why = nullptr;
   if (!findRootLayout(&layout, &why)) return transportFailure(why);
-  if (layout.userdataFirst != kPongUserdataFirst4k || layout.userdataLast != kPongUserdataLast4k ||
+  if (layout.userdataFirst != expectedFirst || layout.userdataLast != expectedLast ||
       layout.userdataLast >= gHost.blocks)
-    return transportFailure("Pong userdata geometry changed");
+    return transportFailure("userdata geometry changed");
   if (layout.manifestStatus) return transportFailure("invalid SHNGROOT manifest/hash/bounds");
   static const struct { const char *name, *product, *signature; unsigned offset; } wanted[] = {
     {"OS", "Pong OS root", "EFI PART", 512},

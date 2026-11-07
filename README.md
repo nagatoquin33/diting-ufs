@@ -7,6 +7,7 @@ SM8475 UFS 主控制器传输层与 SMMU takeover：只发只读存储命令，�
 - SM8475 UFS host：`0x01d84000`、长度 `0x3000`，GCC UFS 页 `0x187000`
 - SMMU stream ID `0xe0`，UFS 中断 SPI 265
 - 根布局只接受 SHNGROOT v1，强制 OS / SystemOS / Data 三个窗口，块大小 512、flags 1
+- UFS 设备树节点可通过 `unixnu,userdata-first-lba` 和 `unixnu,userdata-last-lba` 提供 4 KiB 扇区范围；两项必须同时提供并与实际 GPT 一致。未提供时使用 Pong 原有范围。
 
 ## 仓库关系
 
