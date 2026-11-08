@@ -9,8 +9,10 @@
 #include <IOKit/storage/IOBlockStorageDevice.h>
 #include <IOKit/storage/IOMedia.h>
 #include <IOKit/IOLib.h>
+// panic() is a kernel symbol, not an IOKit header: declare it where the driver needs to
+// surface a fatal bring-up failure instead of a silent IOLog line.
+extern "C" void panic (const char *format, ...) __attribute__ ((noreturn, format (printf, 1, 2)));
 #include <vm/vm_kern.h>
-#include <kern/panic.h>
 #include <kern/clock.h>
 #include <mach/mach_time.h>
 #include <libkern/c++/OSBoolean.h>

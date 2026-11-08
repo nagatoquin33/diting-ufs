@@ -4,10 +4,12 @@
 #include <IOKit/IOService.h>
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/IOLib.h>
+// panic() is a kernel symbol, not an IOKit header: declare it where the driver needs to
+// surface a fatal bring-up failure instead of a silent IOLog line.
+extern "C" void panic (const char *format, ...) __attribute__ ((noreturn, format (printf, 1, 2)));
 #include <libkern/c++/OSData.h>
 #include <libkern/c++/OSString.h>
 #include <libkern/c++/OSIterator.h>
-#include <kern/panic.h>
 #include <kern/thread.h>
 #include <pexpert/pexpert.h>
 #include "../PongProbe.h"
