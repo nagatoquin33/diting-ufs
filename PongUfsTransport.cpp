@@ -10,6 +10,7 @@
 #include <IOKit/storage/IOMedia.h>
 #include <IOKit/IOLib.h>
 #include <vm/vm_kern.h>
+#include <kern/panic.h>
 #include <kern/clock.h>
 #include <mach/mach_time.h>
 #include <libkern/c++/OSBoolean.h>
@@ -118,6 +119,10 @@ static bool transportFailure(const char *why) {
   char text[2400];
   formatUfsRootDiagnostics(text, sizeof(text), gRootDiagnostic, why, "PONG_UFS TRANSPORT");
   IOLog("%s\nPONG_UFS: no media published; continue boot\n", text);
+  // The root device cannot appear without this transport; a silent continue only moves the
+  // failure to IOKitBSDInit. Show the transport state on the panic screen instead.
+  { char brief[900]; snprintf(brief, sizeof(brief), "%s", text);
+    panic("PONG_UFS TRANSPORT panic-report: %s", brief); }
   PongProbeRecord(4, "ufs-transport", PongProbeFail, why, gRootDiagnostic.result);
   snprintf(text, sizeof(text), "stage=%s op=%x ocs=%x scsi=%x protocol=%u", gRootDiagnostic.stage,
            gRootDiagnostic.opcode, gRootDiagnostic.ocs, gRootDiagnostic.scsi, gRootDiagnostic.protocol);

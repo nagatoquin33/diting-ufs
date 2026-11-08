@@ -7,6 +7,7 @@
 #include <libkern/c++/OSData.h>
 #include <libkern/c++/OSString.h>
 #include <libkern/c++/OSIterator.h>
+#include <kern/panic.h>
 #include <kern/thread.h>
 #include <pexpert/pexpert.h>
 #include "../PongProbe.h"
@@ -116,6 +117,9 @@ static bool probeFailure (const char *reason, uint64_t detail = 0)
 {
   native_ufs_status |= 0x80000000U;
   PongProbeRecord (0, "ufs-registers", PongProbeFail, reason, detail);
+  // Without this driver there is no root media, so the boot panics later at
+  // IOKitBSDInit with no explanation. Report the failing board property here.
+  panic ("PONG_UFS PROBE FAILED: %s detail=%llx status=%08x", reason, detail, native_ufs_status);
   return false;
 }
 }
