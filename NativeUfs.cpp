@@ -4,10 +4,6 @@
 #include <IOKit/IOService.h>
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/IOLib.h>
-// panic() is a macro in the kernel SDK headers, so bind the symbol under our own name:
-// the attribute keeps the variadic form without expanding the macro.
-extern "C" void pong_kernel_panic (const char *format, ...)
-    __asm__ ("panic") __attribute__ ((noreturn, format (printf, 1, 2)));
 #include <libkern/c++/OSData.h>
 #include <libkern/c++/OSString.h>
 #include <libkern/c++/OSIterator.h>
@@ -120,9 +116,12 @@ static bool probeFailure (const char *reason, uint64_t detail = 0)
 {
   native_ufs_status |= 0x80000000U;
   PongProbeRecord (0, "ufs-registers", PongProbeFail, reason, detail);
-  // Without this driver there is no root media, so the boot panics later at
-  // IOKitBSDInit with no explanation. Report the failing board property here.
-  pong_kernel_panic ("PONG_UFS PROBE FAILED: %s detail=%llx status=%08x", reason, detail, native_ufs_status);
+  // Without this driver there is no root media and the boot panics later at IOKitBSDInit
+  // with no explanation, so log the failing board property and let pong_ufs_stall hold
+  // the console for a photograph.
+  IOLog ("PONG_UFS PROBE FAILED: %s detail=%llx status=%08x\n", reason, detail, native_ufs_status);
+  uint32_t stall = 0;
+  if (PE_parse_boot_argn ("pong_ufs_stall", &stall, sizeof (stall)) && stall) { for (;;) IOSleep (1000); }
   return false;
 }
 }

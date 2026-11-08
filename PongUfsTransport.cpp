@@ -9,10 +9,6 @@
 #include <IOKit/storage/IOBlockStorageDevice.h>
 #include <IOKit/storage/IOMedia.h>
 #include <IOKit/IOLib.h>
-// panic() is a macro in the kernel SDK headers, so bind the symbol under our own name:
-// the attribute keeps the variadic form without expanding the macro.
-extern "C" void pong_kernel_panic (const char *format, ...)
-    __asm__ ("panic") __attribute__ ((noreturn, format (printf, 1, 2)));
 #include <vm/vm_kern.h>
 #include <kern/clock.h>
 #include <mach/mach_time.h>
@@ -122,10 +118,14 @@ static bool transportFailure(const char *why) {
   char text[2400];
   formatUfsRootDiagnostics(text, sizeof(text), gRootDiagnostic, why, "PONG_UFS TRANSPORT");
   IOLog("%s\nPONG_UFS: no media published; continue boot\n", text);
-  // The root device cannot appear without this transport; a silent continue only moves the
-  // failure to IOKitBSDInit. Show the transport state on the panic screen instead.
-  { char brief[900]; snprintf(brief, sizeof(brief), "%s", text);
-    pong_kernel_panic("PONG_UFS TRANSPORT panic-report: %s", brief); }
+  // The panic screen cannot show these lines and this kernel has no other console,
+  // so with pong_ufs_stall=1 hold the CPU so the last console lines on the panel are the
+  // transport report and can be photographed. Off by default.
+  { uint32_t stall = 0;
+    if (PE_parse_boot_argn("pong_ufs_stall", &stall, sizeof(stall)) && stall) {
+      IOLog("PONG_UFS: stalled for capture; the line above is the transport state\n");
+      for (;;) IOSleep(1000);
+    } }
   PongProbeRecord(4, "ufs-transport", PongProbeFail, why, gRootDiagnostic.result);
   snprintf(text, sizeof(text), "stage=%s op=%x ocs=%x scsi=%x protocol=%u", gRootDiagnostic.stage,
            gRootDiagnostic.opcode, gRootDiagnostic.ocs, gRootDiagnostic.scsi, gRootDiagnostic.protocol);
